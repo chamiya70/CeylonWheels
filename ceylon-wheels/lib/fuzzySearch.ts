@@ -182,11 +182,12 @@ export function scoreListing<T extends SearchListingItem>(
   const modelWords = (listing.model || '').toLowerCase().split(/[\s-]+/).filter(Boolean)
   const yearWord = String(listing.year || '')
   const typeWord = (listing.type || '').toLowerCase()
+  const descWords = (listing.description || '').toLowerCase().split(/[\s-]+/).filter(Boolean)
 
   const allTargetTokens = Array.from(
-    new Set([...titleWords, ...makeWords, ...modelWords, yearWord, typeWord])
+    new Set([...titleWords, ...makeWords, ...modelWords, yearWord, typeWord, ...descWords])
   )
-  const fullText = `${listing.make} ${listing.model} ${listing.title} ${listing.year} ${listing.type || ''}`.toLowerCase()
+  const fullText = `${listing.make} ${listing.model} ${listing.title} ${listing.year} ${listing.type || ''} ${listing.description || ''}`.toLowerCase()
 
   let matchedTokensCount = 0
   let totalTokenScore = 0

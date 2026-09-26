@@ -18,6 +18,7 @@ interface ListingData {
     price: number
     type: string
     status: string
+    description?: string | null
     images: ImageRecord[]
     seller?: {
         user?: {
@@ -40,6 +41,8 @@ export default function ListingDetailPage({
     const [selectedImage, setSelectedImage] = useState<string | null>(null)
     const [isManageModalOpen, setIsManageModalOpen] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
+    const [editingDescription, setEditingDescription] = useState('')
+    const [isUpdatingDesc, setIsUpdatingDesc] = useState(false)
 
     // Fetch listing data
     const loadListing = async () => {
@@ -49,6 +52,7 @@ export default function ListingDetailPage({
             const found = listings.find((item) => item.listingId === id)
             if (found) {
                 setListing(found)
+                setEditingDescription(found.description || '')
                 if (found.images && found.images.length > 0) {
                     setSelectedImage(found.images[0].imageUrl)
                 }
@@ -63,6 +67,28 @@ export default function ListingDetailPage({
     useEffect(() => {
         loadListing()
     }, [id])
+
+    // Update vehicle description
+    const handleUpdateDescription = async () => {
+        setIsUpdatingDesc(true)
+        try {
+            const res = await fetch('/api/listing', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    listingId: id,
+                    description: editingDescription,
+                }),
+            })
+            if (!res.ok) throw new Error('Update failed')
+            await loadListing()
+            alert('Description updated successfully!')
+        } catch {
+            alert('Failed to update description.')
+        } finally {
+            setIsUpdatingDesc(false)
+        }
+    }
 
     // Upload new photo to this listing
     const handleAddNewPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,6 +253,16 @@ export default function ListingDetailPage({
                                 </div>
                             </div>
                         </div>
+
+                        {/* Vehicle Description Section */}
+                        {listing.description ? (
+                            <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6">
+                                <h2 className="text-xl font-bold text-white mb-3">Vehicle Description</h2>
+                                <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-line">
+                                    {listing.description}
+                                </p>
+                            </div>
+                        ) : null}
                     </div>
 
                     {/* Pricing & Contact Sidebar */}
@@ -296,13 +332,36 @@ export default function ListingDetailPage({
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
                     <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-xl p-6 max-h-[85vh] flex flex-col">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold text-white">Manage Vehicle Photos</h2>
+                            <h2 className="text-lg font-bold text-white">Manage Vehicle Details & Photos</h2>
                             <button
                                 onClick={() => setIsManageModalOpen(false)}
                                 className="text-slate-400 hover:text-white text-sm cursor-pointer"
                             >
                                 ✕ Close
                             </button>
+                        </div>
+
+                        {/* Edit Description Section */}
+                        <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-4">
+                            <label className="block text-xs font-semibold text-slate-300 mb-2">
+                                Vehicle Description & Seller Details
+                            </label>
+                            <textarea
+                                rows={3}
+                                placeholder="Add or update vehicle details (condition, mileage, options, seller notes)..."
+                                value={editingDescription}
+                                onChange={(e) => setEditingDescription(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-slate-500 resize-none mb-2"
+                            />
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleUpdateDescription}
+                                    disabled={isUpdatingDesc}
+                                    className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-semibold text-xs px-3.5 py-1.5 rounded-lg transition cursor-pointer"
+                                >
+                                    {isUpdatingDesc ? 'Saving...' : 'Save Description'}
+                                </button>
+                            </div>
                         </div>
 
                         {/* Upload New Section */}

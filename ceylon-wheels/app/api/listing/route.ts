@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { sellerId, title, price, make, model, year, type, lat, lng, videoUrl, images } = body
+    const { sellerId, title, price, make, model, year, type, lat, lng, videoUrl, images, description } = body
 
     // Basic validation
     if (!sellerId || !title || !price || !make || !model || !year || !type || lat === undefined || lng === undefined) {
@@ -73,6 +73,7 @@ export async function POST(request: Request) {
         lat: parseFloat(lat),
         lng: parseFloat(lng),
         videoUrl,
+        description: description ? String(description).trim() : null,
         images: images && images.length > 0 ? {
           create: images.map((url: string) => ({ imageUrl: url }))
         } : undefined,
@@ -92,11 +93,11 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT: Update an existing car listing (including adding/updating photos)
+// PUT: Update an existing car listing (including adding/updating photos and description)
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const { listingId, title, price, make, model, year, type, lat, lng, videoUrl, status, images } = body
+    const { listingId, title, price, make, model, year, type, lat, lng, videoUrl, status, images, description } = body
 
     if (!listingId) {
       return NextResponse.json({ error: 'Missing listingId' }, { status: 400 })
@@ -125,6 +126,7 @@ export async function PUT(request: Request) {
         ...(lng !== undefined && { lng: parseFloat(lng) }),
         ...(videoUrl !== undefined && { videoUrl }),
         ...(status !== undefined && { status }),
+        ...(description !== undefined && { description: description ? String(description).trim() : null }),
       },
       include: {
         images: true,
@@ -140,7 +142,7 @@ export async function PUT(request: Request) {
     if (error?.code === 'P2025') {
       return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
-    return NextResponse.json({ error: 'Failed to update listing' }, { status: 500 })
+    return NextResponse.json({ error: error?.message || 'Failed to update listing' }, { status: 500 })
   }
 }
 

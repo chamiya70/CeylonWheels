@@ -64,6 +64,7 @@ model Listing {
   type          String
   lat           Float
   lng           Float
+  description   String?        @db.Text
   status        String         @default("pending")
   images        ListingImage[]
   conversations Conversation[]

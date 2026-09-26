@@ -19,6 +19,7 @@ interface Listing {
   type: string
   status: string
   sellerId: string
+  description?: string | null
   images?: (ListingImage | string)[]
 }
 
@@ -56,6 +57,7 @@ export default function Home() {
     lat: 6.9271,
     lng: 79.8612,
     imageUrl: '',
+    description: '',
   })
 
   // 1. Fetch Listings with optional query and type filters
@@ -82,6 +84,18 @@ export default function Home() {
       setLoading(false)
     }
   }
+
+  // Restore saved login session on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ceylon_wheels_user')
+      if (saved) {
+        setCurrentUser(JSON.parse(saved))
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+  }, [])
 
   // Automatic debounce for instant, real-time search
   useEffect(() => {
@@ -112,7 +126,11 @@ export default function Home() {
 
       alert(isLoginMode ? 'Logged in successfully!' : 'Signed up successfully!')
       setCurrentUser(data.user)
+      try {
+        localStorage.setItem('ceylon_wheels_user', JSON.stringify(data.user))
+      } catch {}
       setAuthModalOpen(false)
+      setAuthForm((prev) => ({ ...prev, password: '' }))
     } catch {
       alert('Authentication request failed.')
     }
@@ -183,6 +201,7 @@ export default function Home() {
         lat: 6.9271,
         lng: 79.8612,
         imageUrl: '',
+        description: '',
       })
       fetchListings()
     } catch {
@@ -245,8 +264,13 @@ export default function Home() {
                   + Post Car
                 </button>
                 <button
-                  onClick={() => setCurrentUser(null)}
-                  className="border border-slate-700 hover:bg-slate-800 text-sm px-3 py-2 rounded-lg transition"
+                  onClick={() => {
+                    setCurrentUser(null)
+                    try {
+                      localStorage.removeItem('ceylon_wheels_user')
+                    } catch {}
+                  }}
+                  className="border border-slate-700 hover:bg-slate-800 text-sm px-3 py-2 rounded-lg transition cursor-pointer"
                 >
                   Sign Out
                 </button>
@@ -643,6 +667,20 @@ export default function Home() {
                     <option value="HATCHBACK">HATCHBACK</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Description & Seller Notes */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Add vehicle specifications, condition, mileage, or any details for buyers..."
+                  value={carForm.description}
+                  onChange={(e) => setCarForm({ ...carForm, description: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-amber-500 placeholder:text-slate-500 resize-none"
+                />
               </div>
 
               <div className="flex gap-2 pt-2">
