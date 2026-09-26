@@ -1,36 +1,138 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { db } from '@/lib/db'
+'use client'
 
-interface PageProps {
-    params: Promise<{ id: string }>
+import React, { useState, useEffect, use } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+
+interface ImageRecord {
+    imageId: string
+    imageUrl: string
 }
 
-export default async function ListingDetailPage({ params }: PageProps) {
-    const { id } = await params
+interface ListingData {
+    listingId: string
+    title: string
+    make: string
+    model: string
+    year: number
+    price: number
+    type: string
+    status: string
+    images: ImageRecord[]
+    seller?: {
+        user?: {
+            email: string
+            phone?: string
+        }
+    }
+}
 
-    const listing = await db.listing.findUnique({
-        where: { listingId: id },
-        include: {
-            images: true,
-            seller: {
-                include: {
-                    user: {
-                        select: {
-                            email: true,
-                            phone: true,
-                        },
-                    },
-                },
-            },
-        },
-    })
+export default function ListingDetailPage({
+    params,
+}: {
+    params: Promise<{ id: string }>
+}) {
+    const { id } = use(params)
+    const router = useRouter()
 
-    if (!listing) {
-        notFound()
+    const [listing, setListing] = useState<ListingData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [selectedImage, setSelectedImage] = useState<string | null>(null)
+    const [isManageModalOpen, setIsManageModalOpen] = useState(false)
+    const [isUploading, setIsUploading] = useState(false)
+
+    // Fetch listing data
+    const loadListing = async () => {
+        try {
+            const res = await fetch('/api/listing')
+            const listings: ListingData[] = await res.json()
+            const found = listings.find((item) => item.listingId === id)
+            if (found) {
+                setListing(found)
+                if (found.images && found.images.length > 0) {
+                    setSelectedImage(found.images[0].imageUrl)
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load listing', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
-    const primaryImage = listing.images?.[0]?.imageUrl || null
+    useEffect(() => {
+        loadListing()
+    }, [id])
+
+    // Upload new photo to this listing
+    const handleAddNewPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (file.size > 2 * 1024 * 1024) {
+            alert('Please upload an image smaller than 2MB.')
+            return
+        }
+
+        const reader = new FileReader()
+        reader.onloadend = async () => {
+            const base64Url = reader.result as string
+            setIsUploading(true)
+            try {
+                const res = await fetch('/api/listing', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        listingId: id,
+                        images: [base64Url],
+                    }),
+                })
+
+                if (!res.ok) throw new Error('Upload failed')
+                await loadListing()
+            } catch (err) {
+                alert('Failed to upload new photo.')
+            } finally {
+                setIsUploading(false)
+            }
+        }
+        reader.readAsDataURL(file)
+    }
+
+    // Delete an individual image
+    const handleDeletePhoto = async (imageId: string) => {
+        if (!confirm('Are you sure you want to remove this photo?')) return
+
+        try {
+            const res = await fetch(`/api/listing/image?imageId=${imageId}`, {
+                method: 'DELETE',
+            })
+            if (!res.ok) throw new Error('Delete failed')
+            await loadListing()
+        } catch (err) {
+            alert('Failed to remove image.')
+        }
+    }
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-900 text-slate-400 flex items-center justify-center font-sans">
+                Loading car details...
+            </div>
+        )
+    }
+
+    if (!listing) {
+        return (
+            <div className="min-h-screen bg-slate-900 text-slate-300 flex flex-col items-center justify-center font-sans gap-4">
+                <p className="text-xl">Listing not found</p>
+                <Link href="/" className="text-amber-400 underline">
+                    Return to Inventory
+                </Link>
+            </div>
+        )
+    }
+
     const sellerPhone = listing.seller?.user?.phone || null
     const cleanPhone = sellerPhone ? sellerPhone.replace(/[^0-9]/g, '') : null
 
@@ -55,10 +157,11 @@ export default async function ListingDetailPage({ params }: PageProps) {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Main Visuals & Details */}
                     <div className="lg:col-span-2 space-y-6">
-                        <div className="h-[420px] w-full bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
-                            {primaryImage ? (
+                        {/* Primary Main Photo Display */}
+                        <div className="h-[460px] w-full bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center relative shadow-lg">
+                            {selectedImage ? (
                                 <img
-                                    src={primaryImage}
+                                    src={selectedImage}
                                     alt={listing.title}
                                     className="w-full h-full object-cover"
                                 />
@@ -70,22 +173,34 @@ export default async function ListingDetailPage({ params }: PageProps) {
                                     <span className="text-sm font-medium text-slate-500">No Image Available</span>
                                 </div>
                             )}
+
+                            {/* Quick Manage Photos Button Overlay */}
+                            <button
+                                onClick={() => setIsManageModalOpen(true)}
+                                className="absolute top-4 right-4 bg-slate-900/80 hover:bg-slate-800 text-amber-400 border border-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg shadow backdrop-blur transition cursor-pointer"
+                            >
+                                📷 Manage Photos ({listing.images?.length || 0})
+                            </button>
                         </div>
 
-                        {/* Additional Photos strip */}
-                        {listing.images && listing.images.length > 1 && (
-                            <div className="grid grid-cols-4 gap-3">
+                        {/* Clickable Image Strip / Carousel */}
+                        {listing.images && listing.images.length > 0 && (
+                            <div className="flex gap-3 overflow-x-auto pb-2">
                                 {listing.images.map((img) => (
-                                    <div
+                                    <button
                                         key={img.imageId}
-                                        className="h-24 bg-slate-950 rounded-xl overflow-hidden border border-slate-800"
+                                        onClick={() => setSelectedImage(img.imageUrl)}
+                                        className={`h-24 w-32 shrink-0 rounded-xl overflow-hidden border-2 transition cursor-pointer ${selectedImage === img.imageUrl
+                                                ? 'border-amber-500 scale-95 shadow-md shadow-amber-500/20'
+                                                : 'border-slate-800 hover:border-slate-600'
+                                            }`}
                                     >
                                         <img
                                             src={img.imageUrl}
-                                            alt="Vehicle Angle"
+                                            alt="Thumbnail"
                                             className="w-full h-full object-cover"
                                         />
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         )}
@@ -158,6 +273,12 @@ export default async function ListingDetailPage({ params }: PageProps) {
                                         </a>
                                     </>
                                 )}
+                                <button
+                                    onClick={() => setIsManageModalOpen(true)}
+                                    className="block w-full py-3 bg-slate-700 hover:bg-slate-600 text-amber-300 text-center font-semibold rounded-xl transition text-sm cursor-pointer"
+                                >
+                                    Edit / Manage Photos
+                                </button>
                                 <Link
                                     href="/"
                                     className="block w-full py-3 border border-slate-700 hover:bg-slate-800 text-slate-300 text-center font-semibold rounded-xl transition text-sm"
@@ -169,6 +290,70 @@ export default async function ListingDetailPage({ params }: PageProps) {
                     </div>
                 </div>
             </main>
+
+            {/* Photo Manager Modal */}
+            {isManageModalOpen && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+                    <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-xl p-6 max-h-[85vh] flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-bold text-white">Manage Vehicle Photos</h2>
+                            <button
+                                onClick={() => setIsManageModalOpen(false)}
+                                className="text-slate-400 hover:text-white text-sm cursor-pointer"
+                            >
+                                ✕ Close
+                            </button>
+                        </div>
+
+                        {/* Upload New Section */}
+                        <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-4">
+                            <label className="block text-xs font-semibold text-slate-300 mb-2">
+                                Add Another Photo
+                            </label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                disabled={isUploading}
+                                onChange={handleAddNewPhoto}
+                                className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-amber-400 hover:file:bg-slate-600 cursor-pointer bg-slate-950 border border-slate-800 rounded-lg p-1.5"
+                            />
+                            {isUploading && (
+                                <p className="text-xs text-amber-400 mt-2">Uploading photo...</p>
+                            )}
+                        </div>
+
+                        {/* Existing Photos List */}
+                        <p className="text-xs text-slate-400 mb-2 font-medium">
+                            Current Photos ({listing.images?.length || 0})
+                        </p>
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                            {(!listing.images || listing.images.length === 0) && (
+                                <p className="text-xs text-slate-500 py-6 text-center">
+                                    No photos uploaded yet. Use the selector above to add one.
+                                </p>
+                            )}
+                            {listing.images?.map((img) => (
+                                <div
+                                    key={img.imageId}
+                                    className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-700"
+                                >
+                                    <img
+                                        src={img.imageUrl}
+                                        alt="Car thumb"
+                                        className="h-16 w-24 object-cover rounded-lg border border-slate-800"
+                                    />
+                                    <button
+                                        onClick={() => handleDeletePhoto(img.imageId)}
+                                        className="text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer"
+                                    >
+                                        Delete Photo
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
