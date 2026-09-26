@@ -1,20 +1,22 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { searchListings } from '@/lib/fuzzySearch'
 
-// GET: Fetch all car listings with optional filters (e.g., make, model, type)
+// GET: Fetch all car listings with optional filters (make, model, type, or fuzzy query q)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
+    const q = searchParams.get('q') || searchParams.get('query') || searchParams.get('search')
     const make = searchParams.get('make')
     const model = searchParams.get('model')
     const type = searchParams.get('type')
 
+    const searchQuery = (q || make || model || '').trim()
+
     const listings = await db.listing.findMany({
       where: {
         AND: [
-          make ? { make: { equals: make, mode: 'insensitive' } } : {},
-          model ? { model: { equals: model, mode: 'insensitive' } } : {},
-          type ? { type: { equals: type, mode: 'insensitive' } } : {},
+          type && type !== 'ALL' ? { type: { equals: type, mode: 'insensitive' } } : {},
         ],
       },
       include: {
@@ -34,6 +36,12 @@ export async function GET(request: Request) {
         listingId: 'desc',
       },
     })
+
+    // If search query is provided, apply typo-tolerant fuzzy search
+    if (searchQuery) {
+      const { results } = searchListings(listings, searchQuery)
+      return NextResponse.json(results, { status: 200 })
+    }
 
     return NextResponse.json(listings, { status: 200 })
   } catch (error) {

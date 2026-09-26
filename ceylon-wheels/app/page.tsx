@@ -24,7 +24,7 @@ interface Listing {
 
 export default function Home() {
   const [listings, setListings] = useState<Listing[]>([])
-  const [searchMake, setSearchMake] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState('ALL')
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -58,15 +58,18 @@ export default function Home() {
     imageUrl: '',
   })
 
-  // 1. Fetch Listings
-  const fetchListings = async () => {
+  // 1. Fetch Listings with optional query and type filters
+  const fetchListings = async (queryOverride?: string, typeOverride?: string) => {
     setLoading(true)
     setErrorMsg('')
+    const q = (queryOverride !== undefined ? queryOverride : searchQuery).trim()
+    const t = typeOverride !== undefined ? typeOverride : filterType
     try {
-      const url = searchMake.trim()
-        ? `/api/listing?make=${encodeURIComponent(searchMake.trim())}`
-        : '/api/listing'
-      const res = await fetch(url)
+      const params = new URLSearchParams()
+      if (q) params.set('q', q)
+      if (t && t !== 'ALL') params.set('type', t)
+      const queryString = params.toString() ? `?${params.toString()}` : ''
+      const res = await fetch(`/api/listing${queryString}`)
       const data = await res.json()
       if (Array.isArray(data)) {
         setListings(data)
@@ -80,9 +83,13 @@ export default function Home() {
     }
   }
 
+  // Automatic debounce for instant, real-time search
   useEffect(() => {
-    fetchListings()
-  }, [])
+    const handler = setTimeout(() => {
+      fetchListings()
+    }, 300)
+    return () => clearTimeout(handler)
+  }, [searchQuery, filterType])
 
   // 2. Handle Login & Signup
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -265,31 +272,84 @@ export default function Home() {
           Search genuine vehicles directly from verified sellers and business dealers.
         </p>
 
-        <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 flex flex-wrap gap-4 items-center">
-          <input
-            type="text"
-            placeholder="Search by Make (e.g. Toyota, Honda)..."
-            value={searchMake}
-            onChange={(e) => setSearchMake(e.target.value)}
-            className="flex-1 min-w-[240px] bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-          />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            fetchListings()
+          }}
+          className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 flex flex-wrap gap-3 items-center"
+        >
+          <div className="relative flex-1 min-w-[260px]">
+            <svg
+              className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by model, make, or keyword (e.g. Civic FK7, Premio, Toyota)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-9 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 placeholder:text-slate-500 transition"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('')
+                  fetchListings('')
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 rounded-full w-5 h-5 flex items-center justify-center cursor-pointer transition"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
           <select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+            onChange={(e) => {
+              setFilterType(e.target.value)
+              fetchListings(searchQuery, e.target.value)
+            }}
+            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 cursor-pointer"
           >
             <option value="ALL">All Types</option>
             <option value="SEDAN">Sedan</option>
             <option value="SUV">SUV</option>
             <option value="HATCHBACK">Hatchback</option>
           </select>
+
           <button
-            onClick={fetchListings}
-            className="bg-slate-700 hover:bg-slate-600 px-5 py-2 rounded-lg text-sm font-semibold transition"
+            type="submit"
+            className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-5 py-2.5 rounded-lg text-sm transition flex items-center gap-2 cursor-pointer shadow"
           >
-            Apply Filter
+            Search
           </button>
-        </div>
+        </form>
+
+        {/* Active search filter indicator */}
+        {searchQuery.trim() && (
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-400 px-1">
+            <span>
+              Showing results for <strong className="text-amber-400">&ldquo;{searchQuery.trim()}&rdquo;</strong>
+              {' '}({filteredListings.length} {filteredListings.length === 1 ? 'vehicle' : 'vehicles'} found)
+            </span>
+            <button
+              onClick={() => {
+                setSearchQuery('')
+                fetchListings('')
+              }}
+              className="text-amber-400 hover:underline cursor-pointer"
+            >
+              Reset Search
+            </button>
+          </div>
+        )}
       </section>
 
       {/* Car Listings Grid */}
@@ -299,15 +359,37 @@ export default function Home() {
         ) : errorMsg ? (
           <div className="text-center py-20 text-red-400">{errorMsg}</div>
         ) : filteredListings.length === 0 ? (
-          <div className="text-center py-20 border border-dashed border-slate-800 rounded-2xl">
-            <p className="text-slate-400">No car listings found in the database.</p>
-            {currentUser && (
-              <button
-                onClick={() => setAddCarModalOpen(true)}
-                className="mt-4 text-amber-500 underline text-sm hover:text-amber-400"
-              >
-                Create the first listing now
-              </button>
+          <div className="text-center py-20 border border-dashed border-slate-800 rounded-2xl p-6">
+            {searchQuery.trim() ? (
+              <div className="space-y-3">
+                <p className="text-slate-200 text-base font-semibold">
+                  No vehicles found matching &ldquo;{searchQuery.trim()}&rdquo;
+                </p>
+                <p className="text-slate-400 text-sm max-w-md mx-auto">
+                  Try searching with a model name like Civic, Premio, Axio, or brand name like Toyota, Honda.
+                </p>
+                <button
+                  onClick={() => {
+                    setSearchQuery('')
+                    fetchListings('')
+                  }}
+                  className="bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-semibold px-4 py-2 rounded-lg border border-slate-700 transition cursor-pointer"
+                >
+                  Clear Search Filter
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-slate-400">No car listings found in the database.</p>
+                {currentUser && (
+                  <button
+                    onClick={() => setAddCarModalOpen(true)}
+                    className="mt-4 text-amber-500 underline text-sm hover:text-amber-400"
+                  >
+                    Create the first listing now
+                  </button>
+                )}
+              </>
             )}
           </div>
         ) : (
