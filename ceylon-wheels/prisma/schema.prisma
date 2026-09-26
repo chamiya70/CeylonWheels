@@ -1,0 +1,107 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  userId        String         @id @default(uuid()) @map("user_id")
+  email         String         @unique
+  password      String
+  role          Role
+  phone         String?
+  dealerProfile DealerProfile?
+  sellerProfile SellerProfile?
+  buyerConvos   Conversation[] @relation("BuyerConversations")
+  sellerConvos  Conversation[] @relation("SellerConversations")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+enum Role {
+  BUYER
+  PRIVATE_SELLER
+  BUSINESS_DEALER
+  ADMIN
+}
+
+model DealerProfile {
+  dealerId      String   @id @map("dealer_id")
+  user          User     @relation(fields: [dealerId], references: [userId], onDelete: Cascade)
+  businessName  String   @map("business_name")
+  businessRegNo String   @unique @map("business_reg_no")
+  isVerified    Boolean  @default(false) @map("is_verified")
+  showroomLat   Float?   @map("showroom_lat")
+  showroomLng   Float?   @map("showroom_lng")
+  
+  @@map("dealer_profiles")
+}
+
+model SellerProfile {
+  sellerId         String    @id @map("seller_id")
+  user             User      @relation(fields: [sellerId], references: [userId], onDelete: Cascade)
+  sellerType       String    @map("seller_type")
+  freeListingsLeft Int       @default(3) @map("free_listings_left")
+  listings         Listing[]
+
+  @@map("seller_profiles")
+}
+
+model Listing {
+  listingId     String         @id @default(uuid()) @map("listing_id")
+  sellerId      String         @map("seller_id")
+  seller        SellerProfile  @relation(fields: [sellerId], references: [sellerId], onDelete: Cascade)
+  title         String
+  price         Float
+  make          String
+  model         String
+  year          Int
+  videoUrl      String?        @map("video_url")
+  type          String
+  lat           Float
+  lng           Float
+  status        String         @default("pending")
+  images        ListingImage[]
+  conversations Conversation[]
+
+  @@map("listings")
+}
+
+model ListingImage {
+  imageId   String   @id @default(uuid()) @map("image_id")
+  listingId String   @map("listing_id")
+  listing   Listing  @relation(fields: [listingId], references: [listingId], onDelete: Cascade)
+  imageUrl  String   @db.Text @map("image_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("listing_images")
+}
+
+model Conversation {
+  convId    String    @id @default(uuid()) @map("conv_id")
+  listingId String    @map("listing_id")
+  listing   Listing   @relation(fields: [listingId], references: [listingId], onDelete: Cascade)
+  buyerId   String    @map("buyer_id")
+  buyer     User      @relation("BuyerConversations", fields: [buyerId], references: [userId])
+  sellerId  String    @map("seller_id")
+  seller    User      @relation("SellerConversations", fields: [sellerId], references: [userId])
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  messageId    String       @id @default(uuid()) @map("message_id")
+  convId       String       @map("conv_id")
+  conversation Conversation @relation(fields: [convId], references: [convId], onDelete: Cascade)
+  text         String?
+  offerPrice   Float?       @map("offer_price")
+  isPreset     Boolean      @default(false) @map("is_preset")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@map("messages")
+}
